@@ -3,4 +3,4 @@ project(shutdown_watcher)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(shutdown_watcher main.cpp)
+add_executable(shutdown_watcher WIN32 main.cpp)

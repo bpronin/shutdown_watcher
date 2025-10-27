@@ -1,21 +1,16 @@
 ﻿#include <windows.h>
 #include <iostream>
 
-std::wstring suspend_command;
-std::wstring resume_command;
-
-void OnApmSuspend()
+void ExecuteCommand(const wchar_t* command)
 {
-    std::wcout << L"System is suspending. Executing: " << suspend_command << std::endl;
-    if (!suspend_command.empty())
-        _wsystem(suspend_command.c_str());
-}
+    constexpr size_t BUFFER_SIZE = 256;
+    wchar_t buffer[BUFFER_SIZE] = {L'\0'};
+    GetPrivateProfileStringW(L"command", command, nullptr, buffer, BUFFER_SIZE, L".\\settings.ini");
+    const std::wstring action(buffer);
 
-void OnApmResume()
-{
-    std::wcout << L"System resumed from suspend. Executing: " << resume_command << std::endl;
-    if (!resume_command.empty())
-        _wsystem(resume_command.c_str());
+    std::wcout << L"DEBUG: Executing command: '"<< command<< "'. " << "Action: '" << action << "'" << std::endl;
+
+    if (!action.empty()) _wsystem(action.c_str());
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -24,9 +19,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     case WM_POWERBROADCAST:
         if (wParam == PBT_APMSUSPEND)
-            OnApmSuspend();
+        {
+            std::wcout << L"DEBUG: System is suspending" << std::endl;
+
+            ExecuteCommand(L"on_suspend");
+        }
         else if (wParam == PBT_APMRESUMESUSPEND)
-            OnApmResume();
+        {
+            std::wcout << L"DEBUG: System resumed from suspend" << std::endl;
+
+            ExecuteCommand(L"on_resume");
+        }
         return TRUE;
 
     case WM_DESTROY:
@@ -37,21 +40,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
 }
 
-void ReadSettings()
+int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
 {
-    const auto settings_ini = L".\\settings.ini";
+#ifdef _DEBUG
+    AllocConsole();
+    freopen_s(reinterpret_cast<FILE**>(stdout), "CONOUT$", "w", stdout);
+    freopen_s(reinterpret_cast<FILE**>(stderr), "CONOUT$", "w", stderr);
+    freopen_s(reinterpret_cast<FILE**>(stdin), "CONIN$", "r", stdin);
+#endif
 
-    wchar_t buffer[256];
-
-    GetPrivateProfileStringW(L"command", L"on_system_suspend", nullptr, buffer, 256, settings_ini);
-    suspend_command = std::wstring(buffer);
-
-    GetPrivateProfileStringW(L"command", L"on_system_resume", nullptr, buffer, 256, settings_ini);
-    resume_command = std::wstring(buffer);
-}
-
-void RunMain(HINSTANCE hInst)
-{
     const auto CLASS_NAME = "ShutdownWatcherHiddenClass";
 
     WNDCLASS wc = {};
@@ -65,14 +62,11 @@ void RunMain(HINSTANCE hInst)
         HWND_MESSAGE, /* hidden message-only window */
         nullptr, nullptr, nullptr
     );
+    if (!hWnd) return 1;
 
-    if (!hWnd)
-    {
-        MessageBox(nullptr, "Error starting application", "Shutdown Watcher", MB_ICONERROR);
-        return;
-    }
+    const auto hNotify = RegisterSuspendResumeNotification(hWnd, DEVICE_NOTIFY_WINDOW_HANDLE);
 
-    std::wcout << L"Running..." << std::endl;
+    std::wcout << L"DEBUG: Running..." << std::endl;
 
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0))
@@ -80,12 +74,12 @@ void RunMain(HINSTANCE hInst)
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-}
 
-int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
-{
-    ReadSettings();
-    RunMain(hInst);
+    UnregisterSuspendResumeNotification(hNotify);
+
+#ifdef _DEBUG
+    FreeConsole();
+#endif
 
     return 0;
 }
