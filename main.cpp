@@ -5,10 +5,10 @@ void ExecuteCommand(const wchar_t* command)
 {
     constexpr size_t BUFFER_SIZE = 256;
     wchar_t buffer[BUFFER_SIZE] = {L'\0'};
-    GetPrivateProfileStringW(L"command", command, nullptr, buffer, BUFFER_SIZE, L".\\settings.ini");
+    GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
     const std::wstring action(buffer);
 
-    std::wcout << L"DEBUG: Executing command: '"<< command<< "'. " << "Action: '" << action << "'" << std::endl;
+    std::wcout << L"DEBUG - Executing command: '"<< command<< "'. " << "Action: '" << action << "'" << std::endl;
 
     if (!action.empty()) _wsystem(action.c_str());
 }
@@ -20,13 +20,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_POWERBROADCAST:
         if (wParam == PBT_APMSUSPEND)
         {
-            std::wcout << L"DEBUG: System is suspending" << std::endl;
+            std::wcout << L"DEBUG - System is suspending" << std::endl;
 
             ExecuteCommand(L"on_suspend");
         }
         else if (wParam == PBT_APMRESUMESUSPEND)
         {
-            std::wcout << L"DEBUG: System resumed from suspend" << std::endl;
+            std::wcout << L"DEBUG - System resumed from suspend" << std::endl;
 
             ExecuteCommand(L"on_resume");
         }
@@ -66,7 +66,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
 
     const auto hNotify = RegisterSuspendResumeNotification(hWnd, DEVICE_NOTIFY_WINDOW_HANDLE);
 
-    std::wcout << L"DEBUG: Running..." << std::endl;
+    std::wcout << L"DEBUG - Running..." << std::endl;
 
     MSG msg;
     while (GetMessage(&msg, nullptr, 0, 0))
