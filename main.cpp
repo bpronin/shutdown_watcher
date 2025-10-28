@@ -8,9 +8,23 @@ void ExecuteCommand(const wchar_t* command)
     GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
     const std::wstring action(buffer);
 
-    std::wcout << L"DEBUG - Executing command: '"<< command<< "'. " << "Action: '" << action << "'" << std::endl;
+    std::wcout << L"DEBUG - Executing command: '" << command << "'. " << "Action: '" << action << "'" << std::endl;
 
     if (!action.empty()) _wsystem(action.c_str());
+}
+
+HANDLE GetAppMutex()
+{
+    HANDLE hMutex = CreateMutexW(nullptr, TRUE, L"ShutdownWatcher");
+
+    if (hMutex && GetLastError() == ERROR_ALREADY_EXISTS)
+    {
+        MessageBoxW(nullptr, L"Application is already running", L"Warning", MB_ICONWARNING);
+        CloseHandle(hMutex);
+        return nullptr;
+    }
+
+    return hMutex;
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -19,25 +33,34 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     case WM_POWERBROADCAST:
         if (wParam == PBT_APMSUSPEND)
-        {
-            std::wcout << L"DEBUG - System is suspending" << std::endl;
-
             ExecuteCommand(L"on_suspend");
-        }
-        else if (wParam == PBT_APMRESUMESUSPEND)
-        {
-            std::wcout << L"DEBUG - System resumed from suspend" << std::endl;
-
+        else if (wParam == PBT_APMRESUMEAUTOMATIC) /* AUTOMATIC occurs always */
             ExecuteCommand(L"on_resume");
-        }
         return TRUE;
 
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
     default:
-        return DefWindowProc(hWnd, msg, wParam, lParam);
+        return DefWindowProcW(hWnd, msg, wParam, lParam);
     }
+}
+
+HWND CreateAppWindow(HINSTANCE hInst)
+{
+    const auto CLASS_NAME = "ShutdownWatcherHiddenClass";
+
+    WNDCLASS wc = {};
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInst;
+    wc.lpszClassName = CLASS_NAME;
+    RegisterClass(&wc);
+
+    return CreateWindowEx(
+        0, CLASS_NAME, "ShutdownWatcher", 0, 0, 0, 0, 0,
+        HWND_MESSAGE, /* hidden message-only window */
+        nullptr, nullptr, nullptr
+    );
 }
 
 int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
@@ -49,33 +72,23 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int)
     freopen_s(reinterpret_cast<FILE**>(stdin), "CONIN$", "r", stdin);
 #endif
 
-    const auto CLASS_NAME = "ShutdownWatcherHiddenClass";
+    const auto hMutex = GetAppMutex();
+    if (hMutex == nullptr) return 0;
 
-    WNDCLASS wc = {};
-    wc.lpfnWndProc = WndProc;
-    wc.hInstance = hInst;
-    wc.lpszClassName = CLASS_NAME;
-    RegisterClass(&wc);
-
-    HWND hWnd = CreateWindowEx(
-        0, CLASS_NAME, "ShutdownWatcher", 0, 0, 0, 0, 0,
-        HWND_MESSAGE, /* hidden message-only window */
-        nullptr, nullptr, nullptr
-    );
-    if (!hWnd) return 1;
-
+    const auto hWnd = CreateAppWindow(hInst);
     const auto hNotify = RegisterSuspendResumeNotification(hWnd, DEVICE_NOTIFY_WINDOW_HANDLE);
 
     std::wcout << L"DEBUG - Running..." << std::endl;
 
     MSG msg;
-    while (GetMessage(&msg, nullptr, 0, 0))
+    while (GetMessageW(&msg, nullptr, 0, 0))
     {
         TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        DispatchMessageW(&msg);
     }
 
     UnregisterSuspendResumeNotification(hNotify);
+    CloseHandle(hMutex);
 
 #ifdef _DEBUG
     FreeConsole();
