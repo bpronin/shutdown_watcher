@@ -1,14 +1,60 @@
 ﻿#include <windows.h>
 #include <iostream>
 
+// #include <vector>
+//
+// void ExecuteCommand(const wchar_t* command)
+// {
+//     constexpr size_t BUFFER_SIZE = 256;
+//     wchar_t buffer[BUFFER_SIZE] = {L'\0'};
+//     GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
+//
+//     if (wcslen(buffer) == 0) return;
+//
+//     std::wcout << L"DEBUG - Executing command: '" << command << "'" << std::endl;
+//
+//     std::vector cmdBuffer(buffer, buffer + wcslen(buffer) + 1);
+//
+//     STARTUPINFOW si = {sizeof(si)};
+//     PROCESS_INFORMATION pi = {};
+//
+//     const BOOL success = CreateProcessW(
+//         nullptr,
+//         cmdBuffer.data(),
+//         nullptr,
+//         nullptr,
+//         FALSE,
+//         CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+//         nullptr,
+//         nullptr,
+//         &si,
+//         &pi
+//     );
+//
+//     if (success)
+//     {
+//         CloseHandle(pi.hProcess);
+//         CloseHandle(pi.hThread);
+//         std::wcout << L"DEBUG - Process started successfully: " << buffer << std::endl;
+//     }
+//     else
+//     {
+//         std::wcout << L"DEBUG - CreateProcess failed. Error: " << GetLastError() << std::endl;
+//     }
+// }
+
 void ExecuteCommand(const wchar_t* command)
 {
+    std::wcout << L"DEBUG - Received command: '" << command << "'" << std::endl;
+
     constexpr size_t BUFFER_SIZE = 256;
     wchar_t buffer[BUFFER_SIZE] = {L'\0'};
     GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
+    if (wcslen(buffer) == 0) return;
+
     const std::wstring action(buffer);
 
-    std::wcout << L"DEBUG - Executing command: '" << command << "'. " << "Action: '" << action << "'" << std::endl;
+    std::wcout << L"DEBUG - Executing action: '" << action << "'" << std::endl;
 
     if (!action.empty()) _wsystem(action.c_str());
 }
@@ -19,7 +65,7 @@ HANDLE GetAppMutex()
 
     if (hMutex && GetLastError() == ERROR_ALREADY_EXISTS)
     {
-        MessageBoxW(nullptr, L"Application is already running", L"Warning", MB_ICONWARNING);
+        MessageBoxW(nullptr, L"Application is already running", L"Shutdown Watch", MB_ICONWARNING);
         CloseHandle(hMutex);
         return nullptr;
     }
@@ -48,16 +94,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 HWND CreateAppWindow(HINSTANCE hInst)
 {
-    const auto CLASS_NAME = "ShutdownWatcherHiddenClass";
+    const auto CLASS_NAME = L"ShutdownWatcherHiddenClass";
 
-    WNDCLASS wc = {};
+    WNDCLASSW wc = {};
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInst;
     wc.lpszClassName = CLASS_NAME;
-    RegisterClass(&wc);
+    RegisterClassW(&wc);
 
-    return CreateWindowEx(
-        0, CLASS_NAME, "ShutdownWatcher", 0, 0, 0, 0, 0,
+    return CreateWindowExW(
+        0, CLASS_NAME, L"ShutdownWatcher", 0, 0, 0, 0, 0,
         HWND_MESSAGE, /* hidden message-only window */
         nullptr, nullptr, nullptr
     );
