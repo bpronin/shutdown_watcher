@@ -1,62 +1,61 @@
 ﻿#include <windows.h>
 #include <iostream>
 
-// #include <vector>
-//
-// void ExecuteCommand(const wchar_t* command)
-// {
-//     constexpr size_t BUFFER_SIZE = 256;
-//     wchar_t buffer[BUFFER_SIZE] = {L'\0'};
-//     GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
-//
-//     if (wcslen(buffer) == 0) return;
-//
-//     std::wcout << L"DEBUG - Executing command: '" << command << "'" << std::endl;
-//
-//     std::vector cmdBuffer(buffer, buffer + wcslen(buffer) + 1);
-//
-//     STARTUPINFOW si = {sizeof(si)};
-//     PROCESS_INFORMATION pi = {};
-//
-//     const BOOL success = CreateProcessW(
-//         nullptr,
-//         cmdBuffer.data(),
-//         nullptr,
-//         nullptr,
-//         FALSE,
-//         CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-//         nullptr,
-//         nullptr,
-//         &si,
-//         &pi
-//     );
-//
-//     if (success)
-//     {
-//         CloseHandle(pi.hProcess);
-//         CloseHandle(pi.hThread);
-//         std::wcout << L"DEBUG - Process started successfully: " << buffer << std::endl;
-//     }
-//     else
-//     {
-//         std::wcout << L"DEBUG - CreateProcess failed. Error: " << GetLastError() << std::endl;
-//     }
-// }
-
 void ExecuteCommand(const wchar_t* command)
 {
     std::wcout << L"DEBUG - Received command: '" << command << "'" << std::endl;
 
-    constexpr size_t BUFFER_SIZE = 256;
-    wchar_t buffer[BUFFER_SIZE] = {L'\0'};
-    GetPrivateProfileStringW(L"command", command, L"", buffer, BUFFER_SIZE, L".\\settings.ini");
-    if (wcslen(buffer) == 0) return;
+    /* load action from settings */
 
-    const std::wstring action(buffer);
+    constexpr size_t BUFFER_SIZE = 256;
+    wchar_t action[BUFFER_SIZE] = {L'\0'};
+    GetPrivateProfileStringW(L"command", command, L"", action, BUFFER_SIZE, L".\\settings.ini");
+    if (wcslen(action) == 0) return;
+
+    /* run action process */
 
     std::wcout << L"DEBUG - Executing action: '" << action << "'" << std::endl;
 
-    if (!action.empty()) _wsystem(action.c_str());
+    // _wsystem(action); sometimes it produces 0xc0000142 error
+
+    STARTUPINFOW si = {sizeof(si)};
+    PROCESS_INFORMATION pi = {};
+    const BOOL bSuccess = CreateProcessW(
+        nullptr,
+        action,
+        nullptr,
+        nullptr,
+        FALSE,
+        CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+        nullptr,
+        nullptr,
+        &si,
+        &pi
+    );
+
+    if (bSuccess)
+    {
+        std::wcout << L"DEBUG - Process started successfully" << std::endl;
+
+        if (const DWORD dwWaitResult = WaitForSingleObject(pi.hProcess, 5000); dwWaitResult == WAIT_TIMEOUT)
+        {
+            std::wcout << L"DEBUG - Command timed out before sleep" << std::endl;
+        }
+        else
+        {
+            DWORD dwExitCode;
+            GetExitCodeProcess(pi.hProcess, &dwExitCode);
+
+            std::wcout << L"DEBUG - Process finished with exit code " << dwExitCode << std::endl;
+        }
+
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+    }
+    else
+    {
+        std::wcout << L"DEBUG - CreateProcess failed. Error: " << GetLastError() << std::endl;
+    }
 }
 
 HANDLE GetAppMutex()
